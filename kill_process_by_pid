@@ -1,0 +1,43 @@
+## Kill a Process by Pid ##
+
+#include <ntifs.h>
+
+#define PROCESS_TERMINATE (0x0001)  // Add this definition
+
+void SampleUnload(_In_ PDRIVER_OBJECT DriverObject) {
+    UNREFERENCED_PARAMETER(DriverObject);
+    DbgPrint("Sample Driver Unloading\n");
+}
+
+extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
+    UNREFERENCED_PARAMETER(RegistryPath);
+    DriverObject->DriverUnload = SampleUnload;
+
+    PEPROCESS Process;
+    HANDLE ProcessHandle;
+    NTSTATUS status = PsLookupProcessByProcessId((HANDLE)4764, &Process); // Example PID
+    if (NT_SUCCESS(status)) {
+        status = ObOpenObjectByPointer(Process,
+            OBJ_KERNEL_HANDLE,
+            NULL,
+            PROCESS_TERMINATE,
+            *PsProcessType,
+            KernelMode,
+            &ProcessHandle);
+        if (NT_SUCCESS(status)) {
+            KeAttachProcess((PRKPROCESS)Process);
+            ZwTerminateProcess(ProcessHandle, 0); // Corrected to use the handle
+            KeDetachProcess();
+            ZwClose(ProcessHandle);
+            ObDereferenceObject(Process);
+        }
+        else {
+            DbgPrint("Failed to open process handle\n");
+        }
+    }
+    else {
+        DbgPrint("Failed to find process\n");
+    }
+
+    return STATUS_SUCCESS;
+}
